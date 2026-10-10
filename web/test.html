@@ -1,0 +1,138 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Trivia Night test page</title>
+<style>
+  body { font-family: sans-serif; max-width: 800px; margin: 20px auto; padding: 0 10px; }
+  input, select, button { padding: 6px; margin: 3px; }
+  pre { background: #111; color: #0f0; padding: 10px; height: 260px; overflow: auto; }
+  .box { border: 1px solid #ccc; padding: 10px; margin: 10px 0; }
+</style>
+</head>
+<body>
+<h2>Trivia Night test page</h2>
+
+<div class="box">
+  Server: <input id="server" size="40" value="http://127.0.0.1:8787"><br>
+  Mode:
+  <select id="mode"><option value="solo">solo</option><option value="teams">teams</option></select>
+  <button onclick="createRoom()">Create room and connect as host</button>
+  <div>Room code: <b id="code">-</b></div>
+</div>
+
+<div class="box">
+  Player or team name: <input id="pname">
+  <button onclick="addPlayer()">Add player</button>
+  <button onclick="addDisplay()">Open display</button>
+</div>
+
+<div class="box"><b>Host roster (what the host sees)</b><div id="roster">(not connected)</div></div>
+<div class="box"><b>Players you added (simulated phones)</b><div id="players">(none)</div></div>
+<pre id="log"></pre>
+
+<script>
+var code = "", hostWs = null, players = [];
+
+function base() { return document.getElementById("server").value.replace(/\/$/, ""); }
+function wsUrl() { return base().replace(/^http/, "ws") + "/api/rooms/" + code + "/ws"; }
+
+function log(label, text) {
+  var el = document.getElementById("log");
+  el.textContent += label + ": " + text + "\n";
+  el.scrollTop = el.scrollHeight;
+}
+
+function connect(label, joinMsg, onMsg) {
+  var ws = new WebSocket(wsUrl());
+  ws.onopen = function () { ws.send(JSON.stringify(joinMsg)); };
+  ws.onmessage = function (e) { log(label, e.data); if (onMsg) onMsg(JSON.parse(e.data)); };
+  ws.onclose = function () { log(label, "closed"); };
+  return ws;
+}
+
+async function createRoom() {
+  var mode = document.getElementById("mode").value;
+  var r = await fetch(base() + "/api/rooms", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode: mode })
+  });
+  var data = await r.json();
+  if (!r.ok) { log("create", JSON.stringify(data)); return; }
+  code = data.code;
+  players = [];
+  renderPlayers();
+  document.getElementById("code").textContent = code + " (" + data.mode + ")";
+  log("create", "room " + code + " created");
+  hostWs = connect("host", { type: "join", role: "host", hostKey: data.hostKey }, function (m) {
+    if (m.type === "state") renderRoster(m.roster);
+  });
+}
+
+function addPlayer() {
+  if (!code) { log("error", "Create a room first"); return; }
+  var name = document.getElementById("pname").value;
+  var p = { name: name, playerId: null, ws: null };
+  players.push(p);
+  openPlayer(p, { type: "join", role: "player", name: name });
+}
+
+function openPlayer(p, joinMsg) {
+  p.ws = connect("player(" + p.name + ")", joinMsg, function (m) {
+    if (m.type === "joined") { p.playerId = m.playerId; p.name = m.name; }
+    if (m.type === "error" && !p.playerId) {
+      players = players.filter(function (x) { return x !== p; });
+    }
+    renderPlayers();
+  });
+  p.ws.addEventListener("close", renderPlayers);
+}
+
+function addDisplay() {
+  if (!code) { log("error", "Create a room first"); return; }
+  connect("display", { type: "join", role: "display" }, null);
+}
+
+function renderRoster(list) {
+  var el = document.getElementById("roster");
+  el.innerHTML = "";
+  if (!list.length) { el.textContent = "(empty)"; return; }
+  list.forEach(function (p) {
+    var d = document.createElement("div");
+    d.textContent = p.name + (p.online ? " (online) " : " (offline) ");
+    var b = document.createElement("button");
+    b.textContent = "Kick";
+    b.onclick = function () {
+      hostWs.send(JSON.stringify({ type: "host:kick", playerId: p.id }));
+    };
+    d.appendChild(b);
+    el.appendChild(d);
+  });
+}
+
+function renderPlayers() {
+  var el = document.getElementById("players");
+  el.innerHTML = "";
+  if (!players.length) { el.textContent = "(none)"; return; }
+  players.forEach(function (p) {
+    var open = p.ws && p.ws.readyState === 1;
+    var d = document.createElement("div");
+    d.textContent = p.name + (open ? " (connected) " : " (disconnected) ");
+    var b = document.createElement("button");
+    if (open) {
+      b.textContent = "Disconnect";
+      b.onclick = function () { p.ws.close(); };
+    } else {
+      b.textContent = "Reconnect";
+      b.onclick = function () {
+        openPlayer(p, { type: "join", role: "player", playerId: p.playerId });
+      };
+    }
+    d.appendChild(b);
+    el.appendChild(d);
+  });
+}
+</script>
+</body>
+</html>
