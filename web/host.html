@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trivia Night - Host</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root {
+    --bg: #10131a; --card: #1a1f2b; --line: #2b3345; --text: #f2f4f8;
+    --mut: #9aa4b8; --acc: #4f8cff; --good: #2ecc71; --bad: #e74c3c; --warn: #f5a623;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #app { max-width: 900px; margin: 0 auto; padding: 16px 16px 60px; }
+  h1.title { text-align: center; font-size: 36px; margin: 30px 0 6px; }
+  p.sub { text-align: center; color: var(--mut); margin: 0 0 24px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin: 12px 0; }
+  .center { text-align: center; }
+  .lbl { color: var(--mut); font-size: 14px; margin-bottom: 6px; }
+  .btn { padding: 14px 20px; font-size: 17px; font-weight: 600; border-radius: 12px;
+    border: 1px solid var(--line); background: #2a3144; color: var(--text); cursor: pointer; margin: 4px 4px 4px 0; }
+  .btn.primary { background: var(--acc); border-color: var(--acc); color: #fff; }
+  .btn.good { background: var(--good); border-color: var(--good); color: #062b14; }
+  .btn.small { padding: 6px 12px; font-size: 14px; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .mode { background: var(--card); border: 2px solid var(--line); border-radius: 16px; padding: 24px 16px;
+    color: var(--text); cursor: pointer; text-align: center; font-size: 15px; color: var(--mut); }
+  .mode b { display: block; font-size: 26px; color: var(--text); margin-bottom: 8px; }
+  .mode:hover { border-color: var(--acc); }
+  .err { color: var(--bad); font-weight: 600; margin: 12px 0; text-align: center; }
+  .top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .grow { flex: 1; }
+  .chip { background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 14px; color: var(--mut); }
+  .banner { background: #3a2f12; border: 1px solid var(--warn); color: var(--warn); border-radius: 10px;
+    padding: 12px; margin: 10px 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-weight: 600; }
+  .warnbox { background: #2a2312; border: 1px solid var(--warn); color: var(--warn); border-radius: 10px; padding: 10px; margin: 10px 0; font-size: 14px; }
+  .code { font-size: 84px; font-weight: 800; letter-spacing: 14px; margin: 4px 0 4px 14px; }
+  .link { color: var(--acc); word-break: break-all; font-size: 15px; }
+  #qr { display: inline-block; background: #fff; padding: 10px; border-radius: 10px; margin: 12px 0; }
+  .meta { color: var(--mut); display: flex; justify-content: space-between; margin-bottom: 6px; }
+  .time { font-size: 40px; font-weight: 800; text-align: center; margin: 4px 0; }
+  .time.low { color: var(--bad); }
+  .bar { height: 10px; border-radius: 6px; background: #0f1219; overflow: hidden; border: 1px solid var(--line); }
+  .fill { height: 100%; background: var(--acc); }
+  .qtext { font-size: 26px; font-weight: 700; margin: 14px 0; }
+  .opt { display: flex; gap: 12px; align-items: center; padding: 12px 14px; margin: 8px 0;
+    background: #141824; border: 2px solid var(--line); border-radius: 12px; font-size: 19px; }
+  .opt .ltr { width: 32px; height: 32px; line-height: 32px; text-align: center; border-radius: 8px; background: #2a3144; font-weight: 700; flex: none; }
+  .opt.right { border-color: var(--good); background: #14301f; }
+  .opt.right .ltr { background: var(--good); color: #062b14; }
+  .opt .tag { margin-left: auto; color: var(--good); font-size: 14px; font-weight: 700; }
+  .opt .cnt { margin-left: auto; color: var(--mut); font-weight: 700; }
+  .row { display: flex; gap: 10px; padding: 8px 12px; margin: 5px 0; background: #141824; border: 1px solid var(--line); border-radius: 10px; align-items: center; }
+  .row .rk { width: 30px; color: var(--mut); font-weight: 700; }
+  .row .nm { flex: 1; }
+  .row .sc { font-weight: 700; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; background: var(--good); }
+  .dot.off { background: #555; }
+  .inp.ta { width: 100%; min-height: 230px; padding: 12px; font: 15px/1.4 Consolas, monospace;
+    background: #0f1219; color: var(--text); border: 1px solid var(--line); border-radius: 10px; }
+  .help { color: var(--mut); font-size: 13px; margin: 6px 0; white-space: pre-line; }
+  .ok { color: var(--good); font-size: 14px; margin-left: 8px; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #000;
+    border: 1px solid var(--line); padding: 10px 16px; border-radius: 10px; max-width: 90%; }
+  label.chk { color: var(--mut); margin-left: 10px; font-size: 15px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" class="toast" style="display:none"></div>
+
+<script>
+var LIVE_SERVER = "https://trivia-night.obrienmd2.workers.dev";
+var params = new URLSearchParams(location.search);
+
+function defaultServer() {
+  var hn = location.hostname;
+  var local = !hn || hn === "localhost" || hn === "127.0.0.1" ||
+    /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(hn);
+  return local ? "http://" + (hn || "127.0.0.1") + ":8787" : LIVE_SERVER;
+}
+var SERVER = (params.get("server") || defaultServer()).replace(/\/$/, "");
+
+var S = {
+  ws: null, room: null, state: null, offset: 0, gotJoin: false, stop: false,
+  attempts: 0, fails: 0, timer: null, view: "start", msg: "",
+  editor: null, editorLoaded: false, editNote: ""
+};
+var app = document.getElementById("app");
+
+// ---------- helpers ----------
+function h(tag, cls, text, parent) {
+  var e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== null && text !== undefined && text !== "") e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function btn(label, cls, fn, parent, disabled) {
+  var b = h("button", "btn " + (cls || ""), label, parent);
+  b.onclick = fn;
+  if (disabled) b.disabled = true;
+  return b;
+}
+function letter(i) { return String.fromCharCode(65 + i); }
+
+var toastTimer = null;
+function toast(text) {
+  var t = document.getElementById("toast");
+  t.textContent = text; t.style.display = "block";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { t.style.display = "none"; }, 3500);
+}
+
+function saveRoom() { try { localStorage.setItem("tn:host", JSON.stringify(S.room)); } catch (e) {} }
+function loadRoom() { try { return JSON.parse(localStorage.getItem("tn:host")); } catch (e) { return null; } }
+function clearRoom() { try { localStorage.removeItem("tn:host"); } catch (e) {} }
+
+function send(type, extra) {
+  if (S.ws && S.ws.readyState === 1) S.ws.send(JSON.stringify(Object.assign({ type: type }, extra || {})));
+}
+
+function closeSocket() {
+  clearTimeout(S.timer);
+  S.stop = true;
+  if (S.ws) { var w = S.ws; S.ws = null; try { w.close(); } catch (e) {} }
+}
+
+// ---------- room creation and connection ----------
+async function createRoom(mode) {
+  S.msg = "";
+  try {
+    var r = await fetch(SERVER + "/api/rooms", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: mode })
+    });
+    var data = await r.json();
+    if (!r.ok) { S.msg = data.error || "Could not create a room."; return renderStart(); }
+    S.room = { code: data.code, hostKey: data.hostKey, mode: data.mode };
+    saveRoom();
+    S.state = null; S.editorLoaded = false; S.editNote = ""; S.fails = 0; S.attempts = 0;
+    if (S.editor) S.editor.value = "";
+    S.view = "game";
+    renderGame();
+    connect();
+  } catch (e) {
+    S.msg = "Could not reach the server at " + SERVER;
+    renderStart();
+  }
+}
+
+function connect() {
+  clearTimeout(S.timer);
+  S.stop = false;
+  if (S.ws) { var old = S.ws; S.ws = null; try { old.close(); } catch (e) {} }
+  S.gotJoin = false;
+  var ws = new WebSocket(SERVER.replace(/^http/, "ws") + "/api/rooms/" + S.room.code + "/ws");
+  S.ws = ws;
+  ws.onopen = function () {
+    if (S.ws === ws) ws.send(JSON.stringify({ type: "join", role: "host", hostKey: S.room.hostKey }));
+  };
+  ws.onmessage = function (e) {
+    if (S.ws !== ws) return;
+    var m; try { m = JSON.parse(e.data); } catch (x) { return; }
+    handle(m);
+  };
+  ws.onclose = function () { if (S.ws === ws) onClose(); };
+}
+
+function onClose() {
+  if (S.stop) return;
+  if (!S.gotJoin) {
+    S.fails++;
+    if (S.fails >= 3) {
+      clearRoom(); S.room = null; S.state = null;
+      S.msg = "That game is no longer available. Start a new one.";
+      S.view = "start";
+      return renderStart();
+    }
+  }
+  S.attempts++;
+  renderGame();
+  S.timer = setTimeout(connect, Math.min(1000 * S.attempts, 5000));
+}
+
+function handle(m) {
+  if (m.type === "joined") {
+    S.gotJoin = true; S.fails = 0; S.attempts = 0;
+    return renderGame();
+  }
+  if (m.type === "state") {
+    S.state = m;
+    S.offset = m.now - Date.now();
+    if (m.phase === "lobby" && m.questions && !S.editorLoaded) {
+      getEditor().value = questionsToText(m.questions);
+      S.editorLoaded = true;
+    }
+    return renderGame();
+  }
+  if (m.type === "error") {
+    if (!S.gotJoin) {
+      closeSocket(); clearRoom(); S.room = null; S.state = null;
+      S.msg = "Couldn't take control of that game (" + m.message + "). Start a new one.";
+      S.view = "start";
+      return renderStart();
+    }
+    toast(m.message);
+  }
+}
+
+function newRoom() {
+  closeSocket(); clearRoom();
+  S.room = null; S.state = null; S.editorLoaded = false; S.editNote = ""; S.msg = "";
+  S.view = "start";
+  renderStart();
+}
+
+// ---------- question editor helpers ----------
+function getEditor() {
+  if (!S.editor) {
+    S.editor = document.createElement("textarea");
+    S.editor.className = "inp ta";
+    S.editor.spellcheck = false;
+    S.editor.placeholder =
+      "Which planet is known as the Red Planet?\nVenus\n*Mars\nJupiter\nMercury\n\nHow many sides does a hexagon have?\n5\n*6\n7\n8";
+  }
+  return S.editor;
+}
+
+function questionsToText(list) {
+  return list.map(function (q) {
+    return q.text + "\n" + q.options.map(function (o, i) {
+      return (i === q.correct ? "*" : "") + o;
+    }).join("\n");
+  }).join("\n\n");
+}
+
+function parseQuestions(text) {
+  var blocks = text.replace(/\r/g, "").split(/\n\s*\n/);
+  var out = [];
+  blocks.forEach(function (block) {
+    var lines = block.split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
+    if (!lines.length) return;
+    var n = out.length + 1;
+    if (lines.length !== 5) {
+      throw new Error("Question " + n + " needs a question line plus exactly 4 answer lines.");
+    }
+    var correct = -1, stars = 0;
+    var opts = lines.slice(1).map(function (o, j) {
+      if (o.charAt(0) === "*") { correct = j; stars++; o = o.slice(1).trim(); }
+      return o;
+    });
+    if (stars !== 1) throw new Error("Question " + n + ": put a * in front of exactly one correct answer.");
+    out.push({ text: lines[0], options: opts, correct: correct });
+  });
+  if (!out.length) throw new Error("Add at least one question.");
+  return out;
+}
+
+// ---------- rendering ----------
+function renderStart() {
+  app.innerHTML = "";
+  h("h1", "title", "Trivia Night", app);
+  h("p", "sub", "Host a game. Pick how people will play.", app);
+  var g = h("div", "modes", null, app);
+  var a = h("button", "mode", null, g);
+  h("b", null, "Solo", a);
+  a.appendChild(document.createTextNode("Everyone plays on their own phone. Faster correct answers score more."));
+  a.onclick = function () { createRoom("solo"); };
+  var t = h("button", "mode", null, g);
+  h("b", null, "Teams", t);
+  t.appendChild(document.createTextNode("One phone per table. Teams get flat points and longer timers."));
+  t.onclick = function () { createRoom("teams"); };
+  if (S.msg) h("div", "err", S.msg, app);
+}
+
+function renderGame() {
+  if (S.view !== "game" || !S.room) return;
+  app.innerHTML = "";
+  var s = S.state, room = S.room;
+
+  var top = h("div", "top", null, app);
+  h("span", "chip", "Room " + room.code, top);
+  h("span", "chip", room.mode === "teams" ? "Teams" : "Solo", top);
+  h("span", "grow", null, top);
+  btn("New room", "small", function () {
+    if (confirm("Leave this room and start a new one? You won't be able to host this room again.")) newRoom();
+  }, top);
+
+  if (!(S.ws && S.ws.readyState === 1 && S.gotJoin)) {
+    h("div", "warnbox", "Reconnecting to the game...", app);
+  }
+  if (!s) { h("div", "card center", "Connecting...", app); return; }
+
+  if (s.phase === "lobby") renderLobby(s);
+  else if (s.phase === "final") renderFinal(s);
+  else if (s.phase === "leaderboard") renderLeaderboardPhase(s);
+  else renderQuestion(s);
+
+  renderRoster(s);
+}
+
+function joinUrl() {
+  var u = new URL("play.html", location.href);
+  u.search = "?code=" + S.room.code + (params.get("server") ? "&server=" + encodeURIComponent(params.get("server")) : "");
+  u.hash = "";
+  return u.toString();
+}
+
+function renderLobby(s) {
+  var url = joinUrl();
+  var card = h("div", "card center", null, app);
+  h("div", "lbl", "Scan the QR code, or go to the link and enter the code", card);
+  h("div", "code", S.room.code, card);
+  h("div", "link", url, card);
+  var qr = h("div", null, null, card);
+  qr.id = "qr";
+  if (window.QRCode) {
+    try { new QRCode(qr, { text: url, width: 190, height: 190 }); } catch (e) { qr.style.display = "none"; }
+  } else { qr.style.display = "none"; }
+  if (location.protocol === "file:" || /^(127\.0\.0\.1|localhost)$/.test(location.hostname)) {
+    h("div", "warnbox", "Phones can't reach this address. Open this page using your PC's IP address " +
+      "(like http://192.168.x.x:3000/host.html) so the link and QR code work on phones.", card);
+  }
+
+  // questions editor
+  var ed = h("div", "card", null, app);
+  h("div", null, "Questions (" + s.questionTotal + " loaded)", ed).style.fontWeight = "700";
+  h("div", "help",
+    "One question per block, blank line between blocks.\nFirst line is the question, then exactly 4 answers. Put * in front of the correct one.", ed);
+  ed.appendChild(getEditor());
+  var row = h("div", null, null, ed);
+  btn("Save questions", "", function () {
+    try {
+      var list = parseQuestions(getEditor().value);
+      send("host:setQuestions", { questions: list });
+      S.editNote = "Saved " + list.length + " question" + (list.length === 1 ? "" : "s") + ".";
+    } catch (e) { S.editNote = ""; toast(e.message); }
+    renderGame();
+  }, row);
+  if (S.editNote) h("span", "ok", S.editNote, row);
+
+  var c = h("div", "card", null, app);
+  btn("Start game", "primary", function () { send("host:start"); }, c, s.roster.length < 1);
+  autoLockBox(c, s);
+  if (s.roster.length < 1) h("span", "help", "  Waiting for the first player to join.", c);
+}
+
+function autoLockBox(parent, s) {
+  var lab = h("label", "chk", null, parent);
+  var cb = document.createElement("input");
+  cb.type = "checkbox"; cb.checked = !!s.autoLock;
+  cb.onchange = function () { send("host:autoLock", { on: cb.checked }); };
+  lab.appendChild(cb);
+  lab.appendChild(document.createTextNode(" Auto-lock when everyone has answered"));
+}
+
+function renderQuestion(s) {
+  var live = s.phase === "question";
+  var card = h("div", "card", null, app);
+  var meta = h("div", "meta", null, card);
+  h("span", null, "Question " + s.questionNumber + " of " + s.questionTotal, meta);
+  var pr = s.progress;
+  if (pr) {
+    h("span", null, "Answered: " + pr.answered + " of " + pr.total +
+      (pr.disconnected ? " (" + pr.disconnected + " disconnected)" : ""), meta);
+  }
+  if (live) {
+    var t = h("div", "time", null, card); t.id = "timer";
+    var bar = h("div", "bar", null, card);
+    var f = h("div", "fill", null, bar); f.id = "fill";
+    tick();
+  } else if (s.phase === "locked") {
+    h("div", "time", "Locked", card);
+  }
+
+  h("div", "qtext", s.question.text, card);
+  var counts = s.reveal ? s.reveal.counts : null;
+  s.question.options.forEach(function (o, i) {
+    var d = h("div", "opt" + (i === s.hostCorrect ? " right" : ""), null, card);
+    h("span", "ltr", letter(i), d);
+    h("span", null, o, d);
+    if (counts) h("span", "cnt", counts[i] + (counts[i] === 1 ? " answer" : " answers"), d);
+    else if (i === s.hostCorrect) h("span", "tag", "CORRECT (only you see this)", d);
+  });
+
+  if (live && pr && pr.allAnswered) {
+    var b = h("div", "banner", null, card);
+    h("span", null, "Everyone has answered. Ready to lock and reveal?", b);
+    btn("Lock & Reveal", "good", function () { send("host:reveal"); }, b);
+  }
+
+  var c = h("div", "card", null, app);
+  if (live) {
+    btn("Lock now", "", function () { send("host:lock"); }, c);
+    btn("Reveal answer", "primary", function () { send("host:reveal"); }, c);
+    autoLockBox(c, s);
+  } else if (s.phase === "locked") {
+    btn("Reveal answer", "primary", function () { send("host:reveal"); }, c);
+  } else if (s.phase === "reveal") {
+    btn("Show leaderboard", "", function () { send("host:leaderboard"); }, c);
+    nextButton(c, s, true);
+  }
+}
+
+function nextButton(parent, s, primary) {
+  var last = s.questionNumber >= s.questionTotal;
+  btn(last ? "Finish game" : "Next question", primary ? "primary" : "primary",
+    function () { send("host:next"); }, parent);
+}
+
+function boardRows(parent, list, limit) {
+  list.slice(0, limit || 50).forEach(function (p) {
+    var r = h("div", "row", null, parent);
+    h("span", "rk", p.rank, r); h("span", "nm", p.name, r); h("span", "sc", p.score, r);
+  });
+}
+
+function renderLeaderboardPhase(s) {
+  var card = h("div", "card", null, app);
+  h("div", "qtext", "Leaderboard", card);
+  boardRows(card, s.leaderboard || [], 10);
+  var c = h("div", "card", null, app);
+  nextButton(c, s, true);
+}
+
+function renderFinal(s) {
+  var card = h("div", "card", null, app);
+  h("div", "qtext", "Final standings", card);
+  boardRows(card, s.leaderboard || [], 50);
+  var c = h("div", "card", null, app);
+  btn("Play again (same players)", "primary", function () { send("host:reset"); }, c);
+  btn("New room", "", function () {
+    if (confirm("Start a brand-new room with a new code?")) newRoom();
+  }, c);
+}
+
+function renderRoster(s) {
+  var card = h("div", "card", null, app);
+  var noun = S.room.mode === "teams" ? "Teams" : "Players";
+  h("div", null, noun + " (" + s.roster.length + ")", card).style.fontWeight = "700";
+  if (!s.roster.length) h("div", "help", "Nobody has joined yet.", card);
+  s.roster.forEach(function (p) {
+    var r = h("div", "row", null, card);
+    var nm = h("span", "nm", null, r);
+    h("span", p.online ? "dot" : "dot off", null, nm);
+    nm.appendChild(document.createTextNode(p.name + (p.online ? "" : " (offline)")));
+    btn("Kick", "small", function () {
+      if (confirm("Remove " + p.name + " from the game?")) send("host:kick", { playerId: p.id });
+    }, r);
+  });
+}
+
+// ---------- countdown ----------
+function tick() {
+  var s = S.state, t = document.getElementById("timer");
+  if (!s || s.phase !== "question" || !t) return;
+  var left = Math.max(0, s.deadline - (Date.now() + S.offset));
+  t.textContent = Math.ceil(left / 1000) + "s";
+  t.classList.toggle("low", left <= 5000);
+  var f = document.getElementById("fill");
+  if (f) f.style.width = (100 * left / s.duration) + "%";
+}
+setInterval(tick, 200);
+
+// ---------- start ----------
+(function init() {
+  var saved = loadRoom();
+  if (saved && saved.code && saved.hostKey) {
+    S.room = saved; S.view = "game";
+    renderGame();
+    connect();
+  } else {
+    renderStart();
+  }
+})();
+</script>
+</body>
+</html>

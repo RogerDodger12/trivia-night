@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trivia Night</title>
+<style>
+  :root {
+    --bg: #10131a; --card: #1a1f2b; --line: #2b3345; --text: #f2f4f8;
+    --mut: #9aa4b8; --acc: #4f8cff; --good: #2ecc71; --bad: #e74c3c; --warn: #f5a623;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  }
+  #app { max-width: 480px; margin: 0 auto; padding: 16px 16px 48px; min-height: 100vh; }
+  h1.title { text-align: center; font-size: 32px; margin: 28px 0 4px; }
+  p.sub { text-align: center; color: var(--mut); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin: 12px 0; }
+  .lbl { display: block; color: var(--mut); font-size: 14px; margin: 12px 0 6px; }
+  .inp {
+    width: 100%; padding: 14px; font-size: 20px; border-radius: 10px;
+    border: 1px solid var(--line); background: #0f1219; color: var(--text);
+  }
+  .inp.code { text-align: center; letter-spacing: 8px; font-size: 28px; text-transform: uppercase; }
+  .btn {
+    display: block; width: 100%; padding: 16px; font-size: 18px; font-weight: 600;
+    border-radius: 12px; border: 1px solid var(--line); background: #2a3144; color: var(--text);
+    margin-top: 14px; cursor: pointer;
+  }
+  .btn.primary { background: var(--acc); border-color: var(--acc); color: #fff; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .err { color: var(--bad); margin-top: 12px; font-weight: 600; }
+  .top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .chip { background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font-size: 13px; color: var(--mut); }
+  .who { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pts { font-weight: 700; color: var(--warn); }
+  .banner { background: #3a2f12; border: 1px solid var(--warn); color: var(--warn); border-radius: 10px; padding: 8px 12px; margin: 8px 0; text-align: center; font-size: 14px; }
+  .meta { color: var(--mut); font-size: 14px; margin: 10px 0 6px; display: flex; justify-content: space-between; }
+  .timerwrap { margin: 6px 0 12px; }
+  .bar { height: 10px; border-radius: 6px; background: #0f1219; overflow: hidden; border: 1px solid var(--line); }
+  .fill { height: 100%; width: 100%; background: var(--acc); }
+  .time { text-align: center; font-size: 28px; font-weight: 700; margin-top: 6px; }
+  .time.low { color: var(--bad); }
+  .qtext { font-size: 22px; font-weight: 700; line-height: 1.3; margin: 8px 0 14px; }
+  .opt {
+    display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+    padding: 14px; margin: 8px 0; font-size: 18px; color: var(--text);
+    background: var(--card); border: 2px solid var(--line); border-radius: 12px; cursor: pointer;
+  }
+  .opt .ltr {
+    flex: none; width: 34px; height: 34px; line-height: 34px; text-align: center;
+    border-radius: 8px; background: #2a3144; font-weight: 700;
+  }
+  .opt.sel { border-color: var(--acc); background: #1c2a4a; }
+  .opt.sel .ltr { background: var(--acc); }
+  .opt.right { border-color: var(--good); background: #14301f; }
+  .opt.right .ltr { background: var(--good); }
+  .opt.wrong { border-color: var(--bad); background: #351818; }
+  .opt.wrong .ltr { background: var(--bad); }
+  .opt:disabled { cursor: default; color: var(--text); }
+  .opt:disabled:not(.sel):not(.right):not(.wrong) { opacity: .55; }
+  .note { text-align: center; color: var(--mut); margin: 12px 0; }
+  .result { text-align: center; font-size: 24px; font-weight: 700; margin: 14px 0; }
+  .result.good { color: var(--good); }
+  .result.bad { color: var(--bad); }
+  .row { display: flex; gap: 10px; padding: 10px 12px; border-radius: 10px; margin: 6px 0; background: var(--card); border: 1px solid var(--line); }
+  .row.me { border-color: var(--acc); background: #1c2a4a; }
+  .row .rk { width: 30px; color: var(--mut); font-weight: 700; }
+  .row .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .sc { font-weight: 700; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; background: var(--good); }
+  .dot.off { background: #555; }
+  .big { text-align: center; font-size: 26px; font-weight: 700; margin: 24px 0 8px; }
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    background: #000; border: 1px solid var(--line); padding: 10px 16px; border-radius: 10px; max-width: 90%;
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" class="toast" style="display:none"></div>
+
+<script>
+var LIVE_SERVER = "https://trivia-night.obrienmd2.workers.dev";
+var params = new URLSearchParams(location.search);
+
+function defaultServer() {
+  var hn = location.hostname;
+  var local = !hn || hn === "localhost" || hn === "127.0.0.1" ||
+    /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(hn);
+  return local ? "http://" + (hn || "127.0.0.1") + ":8787" : LIVE_SERVER;
+}
+var SERVER = (params.get("server") || defaultServer()).replace(/\/$/, "");
+
+var S = {
+  ws: null, code: "", name: "", playerId: null, mode: "solo",
+  state: null, offset: 0, joined: false, everJoined: false, stop: false,
+  attempts: 0, pick: null, pickQ: 0, sending: false, msg: "", view: "join",
+  timer: null, triedId: false
+};
+var app = document.getElementById("app");
+
+// ---------- helpers ----------
+function h(tag, cls, text, parent) {
+  var e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== null && text !== undefined && text !== "") e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function letter(i) { return String.fromCharCode(65 + i); }
+
+function sk(code) { return "tn:" + code; }
+function loadSaved(code) {
+  try { return JSON.parse(localStorage.getItem(sk(code))); } catch (e) { return null; }
+}
+function saveSession() {
+  try {
+    localStorage.setItem(sk(S.code), JSON.stringify({ playerId: S.playerId, name: S.name }));
+    localStorage.setItem("tn:last", S.code);
+  } catch (e) {}
+}
+function clearSaved(code) {
+  try { localStorage.removeItem(sk(code)); localStorage.removeItem("tn:pick:" + code); } catch (e) {}
+}
+function savePick() {
+  try { localStorage.setItem("tn:pick:" + S.code, JSON.stringify({ q: S.pickQ, choice: S.pick })); } catch (e) {}
+}
+function loadPick(q) {
+  try {
+    var p = JSON.parse(localStorage.getItem("tn:pick:" + S.code));
+    return p && p.q === q ? p.choice : null;
+  } catch (e) { return null; }
+}
+
+var toastTimer = null;
+function toast(text) {
+  var t = document.getElementById("toast");
+  t.textContent = text;
+  t.style.display = "block";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { t.style.display = "none"; }, 3000);
+}
+
+function send(obj) {
+  if (S.ws && S.ws.readyState === 1) S.ws.send(JSON.stringify(obj));
+}
+
+// ---------- connection ----------
+function joinMsg() {
+  var m = { type: "join", role: "player" };
+  S.triedId = !!S.playerId;
+  if (S.playerId) m.playerId = S.playerId; else m.name = S.name;
+  return m;
+}
+
+function connect() {
+  clearTimeout(S.timer);
+  S.stop = false;
+  if (S.ws) {
+    var old = S.ws;
+    S.ws = null;
+    try { old.close(); } catch (e) {}
+  }
+  var ws = new WebSocket(SERVER.replace(/^http/, "ws") + "/api/rooms/" + S.code + "/ws");
+  S.ws = ws;
+  ws.onopen = function () { if (S.ws === ws) ws.send(JSON.stringify(joinMsg())); };
+  ws.onmessage = function (e) {
+    if (S.ws !== ws) return;
+    var m;
+    try { m = JSON.parse(e.data); } catch (x) { return; }
+    handle(m);
+  };
+  ws.onclose = function () { if (S.ws === ws) onClose(); };
+}
+
+function onClose() {
+  S.joined = false;
+  if (S.stop) return;
+  if (!S.playerId && !S.everJoined) {
+    S.msg = "Couldn't reach that room. Check the code and try again.";
+    S.view = "join";
+    return render();
+  }
+  S.attempts++;
+  if (S.attempts > 8) { S.view = "lost"; return render(); }
+  render();
+  clearTimeout(S.timer);
+  S.timer = setTimeout(connect, Math.min(1000 * S.attempts, 5000));
+}
+
+function fatal(message) {
+  S.stop = true;
+  if (S.ws) { var w = S.ws; S.ws = null; try { w.close(); } catch (e) {} }
+  if (S.triedId) {
+    clearSaved(S.code);
+    S.playerId = null;
+    S.msg = "Your session ended. Please join again.";
+  } else {
+    S.msg = message;
+  }
+  S.view = "join";
+  render();
+}
+
+function handle(m) {
+  if (m.type === "joined") {
+    S.joined = true; S.everJoined = true; S.attempts = 0;
+    S.playerId = m.playerId; S.name = m.name; S.mode = m.mode;
+    saveSession();
+    try { S.ws.send("ping"); } catch (e) {}
+    S.view = "game";
+    return render();
+  }
+  if (m.type === "state") {
+    S.state = m;
+    S.offset = m.now - Date.now();
+    S.sending = false;
+    if (m.questionNumber !== S.pickQ) {
+      S.pickQ = m.questionNumber;
+      S.pick = loadPick(m.questionNumber);
+    }
+    if (S.view === "game") renderGame();
+    return;
+  }
+  if (m.type === "error") {
+    S.sending = false;
+    if (!S.joined) return fatal(m.message);
+    toast(m.message);
+    return renderGame();
+  }
+  if (m.type === "kicked") {
+    S.stop = true;
+    clearSaved(S.code);
+    S.playerId = null;
+    S.view = "kicked";
+    return render();
+  }
+}
+
+document.addEventListener("visibilitychange", function () {
+  if (document.visibilityState === "visible" && S.view === "game" && !S.stop &&
+      (!S.ws || S.ws.readyState > 1)) {
+    connect();
+  }
+});
+
+// ---------- rendering ----------
+function render() {
+  if (S.view === "join") return renderJoin();
+  if (S.view === "kicked") return renderMessage("You were removed from the game.", "Join again");
+  if (S.view === "lost") return renderMessage("Lost connection to the game.", "Try again", true);
+  renderGame();
+}
+
+function renderJoin() {
+  app.innerHTML = "";
+  h("h1", "title", "Trivia Night", app);
+  h("p", "sub", "Enter the room code from the screen.", app);
+  var card = h("div", "card", null, app);
+  h("label", "lbl", "Room code", card);
+  var code = h("input", "inp code", null, card);
+  code.maxLength = 4; code.value = S.code || ""; code.placeholder = "ABCD";
+  code.autocapitalize = "characters"; code.autocomplete = "off";
+  code.setAttribute("autocorrect", "off"); code.spellcheck = false;
+  h("label", "lbl", "Your name (or team name)", card);
+  var name = h("input", "inp", null, card);
+  name.maxLength = 20; name.value = S.name || ""; name.placeholder = "Name";
+  name.autocomplete = "off";
+  if (S.msg) h("div", "err", S.msg, card);
+  var b = h("button", "btn primary", "Join game", card);
+
+  code.oninput = function () { code.value = code.value.toUpperCase().replace(/[^A-Z]/g, ""); };
+  function go() {
+    var c = code.value.trim().toUpperCase();
+    var n = name.value.replace(/\s+/g, " ").trim();
+    S.code = c; S.name = n;
+    if (!/^[A-Z]{4}$/.test(c)) { S.msg = "Enter the 4-letter room code."; return renderJoin(); }
+    if (!n) { S.msg = "Enter a name."; return renderJoin(); }
+    S.playerId = null; S.msg = ""; S.everJoined = false; S.attempts = 0; S.state = null;
+    clearSaved(c);
+    b.disabled = true; b.textContent = "Joining...";
+    connect();
+  }
+  b.onclick = go;
+  name.onkeydown = function (e) { if (e.key === "Enter") go(); };
+}
+
+function renderMessage(text, buttonLabel, retry) {
+  app.innerHTML = "";
+  h("h1", "title", "Trivia Night", app);
+  h("div", "big", text, app);
+  var b = h("button", "btn primary", buttonLabel, app);
+  b.onclick = function () {
+    if (retry) { S.attempts = 0; S.view = "game"; renderGame(); connect(); }
+    else { S.msg = ""; S.view = "join"; renderJoin(); }
+  };
+}
+
+function renderGame() {
+  app.innerHTML = "";
+  var s = S.state;
+
+  var top = h("div", "top", null, app);
+  h("span", "chip", "Room " + S.code, top);
+  h("span", "who", S.name, top);
+  if (s && s.me) h("span", "pts", s.me.score + " pts", top);
+
+  var connected = S.ws && S.ws.readyState === 1 && S.joined;
+  if (!connected) h("div", "banner", "Reconnecting...", app);
+
+  if (!s) { h("div", "note", "Connecting...", app); return; }
+
+  if (s.phase === "lobby") return renderLobby(s);
+  if (s.phase === "question" || s.phase === "locked" || s.phase === "reveal") return renderQuestion(s);
+  if (s.phase === "leaderboard") return renderBoard(s, false);
+  if (s.phase === "final") return renderBoard(s, true);
+}
+
+function renderLobby(s) {
+  h("div", "big", "You're in!", app);
+  h("div", "note", S.mode === "teams"
+    ? "Waiting for the host to start. Get your team ready."
+    : "Waiting for the host to start the game.", app);
+  var card = h("div", "card", null, app);
+  h("div", "meta", s.roster.length + (S.mode === "teams" ? " teams joined" : " players joined"), card);
+  s.roster.forEach(function (p) {
+    var r = h("div", null, null, card);
+    r.style.padding = "4px 0";
+    h("span", p.online ? "dot" : "dot off", null, r);
+    r.appendChild(document.createTextNode(p.name));
+  });
+}
+
+function renderQuestion(s) {
+  var me = s.me || {};
+  var live = s.phase === "question";
+  var box = h("div", null, null, app);
+
+  var meta = h("div", "meta", null, box);
+  h("span", null, "Question " + s.questionNumber + " of " + s.questionTotal, meta);
+  if (live && s.progress) h("span", null, s.progress.answered + " of " + s.progress.total + " answered", meta);
+
+  if (live) {
+    var tw = h("div", "timerwrap", null, box);
+    var bar = h("div", "bar", null, tw);
+    var fill = h("div", "fill", null, bar);
+    fill.id = "fill";
+    var t = h("div", "time", null, tw);
+    t.id = "timer";
+    tick();
+  }
+
+  h("div", "qtext", s.question.text, box);
+
+  var frozen = !live || me.submitted || !me.eligible;
+  var shown = me.submitted ? me.choice : S.pick;
+  s.question.options.forEach(function (o, i) {
+    var b = h("button", "opt", null, box);
+    h("span", "ltr", letter(i), b);
+    h("span", null, o, b);
+    if (shown === i) b.classList.add("sel");
+    if (s.phase === "reveal" && s.reveal) {
+      if (i === s.reveal.correct) b.classList.add("right");
+      else if (me.submitted && me.choice === i) b.classList.add("wrong");
+    }
+    b.disabled = frozen;
+    b.onclick = function () { S.pick = i; savePick(); renderGame(); };
+  });
+
+  if (live) {
+    var sb = h("button", "btn primary", "Submit answer", box);
+    sb.disabled = frozen || S.pick === null || S.sending;
+    sb.onclick = function () {
+      if (S.pick === null) return;
+      S.sending = true;
+      send({ type: "submit", choice: S.pick });
+      renderGame();
+    };
+  }
+
+  var msg = "";
+  if (!me.eligible && s.phase !== "reveal") msg = "You joined mid-question. You're in for the next one.";
+  else if (me.submitted && live) msg = "Locked in. Waiting for the others...";
+  else if (me.submitted && s.phase === "locked") msg = "Locked in. Waiting for the answer...";
+  else if (s.phase === "locked") msg = "Time's up. No answer recorded.";
+  else if (live && S.pick === null) {
+    msg = S.mode === "teams"
+      ? "Huddle up, pick your team's answer, then tap Submit."
+      : "Pick an answer, then tap Submit. Faster correct answers score more.";
+  } else if (live) msg = "Tap Submit to lock it in. You can't change it afterward.";
+  if (msg) h("div", "note", msg, box);
+
+  if (s.phase === "reveal") {
+    var r = me.result;
+    if (!me.eligible) h("div", "result", "You joined after this question.", box);
+    else if (r && r.correct) h("div", "result good", "Correct! +" + r.gained, box);
+    else if (me.submitted) h("div", "result bad", "Not this time. +0", box);
+    else h("div", "result bad", "No answer. +0", box);
+    h("div", "note", "Waiting for the host...", box);
+  }
+}
+
+function renderBoard(s, final) {
+  var list = s.leaderboard || [];
+  h("div", "big", final ? "Final standings" : "Leaderboard", app);
+
+  var mine = null;
+  list.forEach(function (p) { if (p.name === S.name) mine = p; });
+  if (final && mine) {
+    h("div", "note", "You finished #" + mine.rank + " with " + mine.score + " points.", app);
+  }
+
+  function row(p) {
+    var r = h("div", "row" + (p.name === S.name ? " me" : ""), null, app);
+    h("span", "rk", p.rank, r);
+    h("span", "nm", p.name, r);
+    h("span", "sc", p.score, r);
+  }
+  var top = list.slice(0, 10);
+  top.forEach(row);
+  if (mine && top.indexOf(mine) === -1) {
+    h("div", "note", "...", app);
+    row(mine);
+  }
+
+  if (final) {
+    var b = h("button", "btn", "Leave game", app);
+    b.onclick = function () {
+      S.stop = true;
+      if (S.ws) { var w = S.ws; S.ws = null; try { w.close(); } catch (e) {} }
+      clearSaved(S.code);
+      S.playerId = null; S.name = ""; S.code = ""; S.state = null; S.msg = ""; S.view = "join";
+      renderJoin();
+    };
+  } else {
+    h("div", "note", "Waiting for the next question...", app);
+  }
+}
+
+// ---------- countdown ----------
+function tick() {
+  var s = S.state, t = document.getElementById("timer");
+  if (!s || s.phase !== "question" || !t) return;
+  var left = Math.max(0, s.deadline - (Date.now() + S.offset));
+  t.textContent = Math.ceil(left / 1000) + "s";
+  t.classList.toggle("low", left <= 5000);
+  var f = document.getElementById("fill");
+  if (f) f.style.width = (100 * left / s.duration) + "%";
+}
+setInterval(tick, 200);
+setInterval(function () {
+  if (S.ws && S.ws.readyState === 1) { try { S.ws.send("ping"); } catch (e) {} }
+}, 10000);
+
+// ---------- start ----------
+(function init() {
+  var qc = (params.get("code") || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4);
+  var last = "";
+  try { last = localStorage.getItem("tn:last") || ""; } catch (e) {}
+  var c = qc || last;
+  if (c) {
+    var sv = loadSaved(c);
+    if (sv && sv.playerId) {
+      S.code = c; S.playerId = sv.playerId; S.name = sv.name || "";
+      S.view = "game";
+      renderGame();
+      connect();
+      return;
+    }
+  }
+  S.code = qc;
+  renderJoin();
+})();
+</script>
+</body>
+</html>

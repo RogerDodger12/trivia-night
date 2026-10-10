@@ -8,6 +8,8 @@ const MIN_SECONDS = 5;
 const DEFAULT_SECONDS = { solo: 20, teams: 60 };
 const BASE_POINTS = 1000;
 const SPEED_BONUS = 500;             // solo only, scaled to the question timer
+const STALE_MS = 25000;              // no ping for this long = offline
+const TICK_MS = 10000;               // how often the server re-checks who is online
 
 const SAMPLE_QUESTIONS = [
   { text: "Which planet is known as the Red Planet?", options: ["Venus", "Mars", "Jupiter", "Mercury"], correct: 1 },
@@ -21,6 +23,9 @@ export class GameRoom extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     this.room = null;
+    this.lastSig = "";
+    // Cloudflare answers "ping" with "pong" without waking this object
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
     ctx.blockConcurrencyWhile(async () => {
       this.room = (await ctx.storage.get("room")) ?? null;
       if (this.room) {
@@ -54,11 +59,13 @@ export class GameRoom extends DurableObject {
     await this.scheduleAlarm();
   }
 
-  // One alarm serves two jobs: the question deadline and idle cleanup.
+  // One alarm serves three jobs: question deadline, presence check, idle cleanup.
   async scheduleAlarm() {
     const r = this.room;
+    if (!r) return;
     let next = r.idleAt;
     if (r.phase === "question" && r.current) next = Math.min(next, r.current.deadline);
+    if (this.ctx.getWebSockets().length > 0) next = Math.min(next, Date.now() + TICK_MS);
     await this.ctx.storage.setAlarm(next);
   }
 
@@ -76,9 +83,11 @@ export class GameRoom extends DurableObject {
       return;
     }
     if (r.phase === "question" && r.current && now >= r.current.deadline) {
-      await this.lockQuestion(); // saves and reschedules
+      await this.lockQuestion(); // saves, broadcasts and reschedules
       return;
     }
+    // Presence check: tell everyone if someone went quiet or came back
+    if (this.presenceSig() !== this.lastSig) this.broadcast();
     await this.scheduleAlarm();
   }
 
@@ -104,14 +113,23 @@ export class GameRoom extends DurableObject {
     return String(s ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_NAME);
   }
 
+  // A player is online if their socket is open AND we heard from them recently.
   onlineIds() {
     const ids = new Set();
+    const now = Date.now();
     for (const ws of this.ctx.getWebSockets()) {
       if (ws.readyState !== 1) continue;
       const who = ws.deserializeAttachment();
-      if (who && who.playerId) ids.add(who.playerId);
+      if (!who || !who.playerId) continue;
+      const ts = this.ctx.getWebSocketAutoResponseTimestamp(ws);
+      const last = Math.max(who.at || 0, ts ? ts.getTime() : 0);
+      if (now - last <= STALE_MS) ids.add(who.playerId);
     }
     return ids;
+  }
+
+  presenceSig() {
+    return [...this.onlineIds()].sort().join(",");
   }
 
   duration(q) {
@@ -176,7 +194,10 @@ export class GameRoom extends DurableObject {
       if (role === "host") snap.hostCorrect = q.correct;
     }
 
-    if (role === "host") snap.autoLock = r.autoLock;
+    if (role === "host") {
+      snap.autoLock = r.autoLock;
+      if (r.phase === "lobby") snap.questions = r.questions;
+    }
     if (r.phase === "leaderboard" || r.phase === "final") snap.leaderboard = this.leaderboard();
 
     if (role === "player" && playerId && r.players[playerId]) {
@@ -197,6 +218,7 @@ export class GameRoom extends DurableObject {
 
   broadcast() {
     if (!this.room) return;
+    this.lastSig = this.presenceSig();
     for (const ws of this.ctx.getWebSockets()) {
       const who = ws.deserializeAttachment();
       if (!who) continue; // not joined yet
@@ -279,7 +301,10 @@ export class GameRoom extends DurableObject {
       return this.error(ws, "Bad message");
     }
 
-    if (msg.type === "join") return this.handleJoin(ws, msg);
+    if (msg.type === "join") {
+      await this.handleJoin(ws, msg);
+      return this.scheduleAlarm(); // starts the presence check ticking
+    }
 
     const who = ws.deserializeAttachment();
     if (!who) return this.error(ws, "Join first");
@@ -374,6 +399,16 @@ export class GameRoom extends DurableObject {
       return this.broadcast();
     }
 
+    if (msg.type === "host:reset") {
+      if (r.phase !== "final") return this.error(ws, "The game isn't finished yet");
+      r.phase = "lobby";
+      r.qIndex = -1;
+      r.current = null;
+      for (const p of Object.values(r.players)) p.score = 0;
+      await this.save();
+      return this.broadcast();
+    }
+
     if (msg.type === "host:next") {
       if (r.phase !== "reveal" && r.phase !== "leaderboard") {
         return this.error(ws, "Finish the current question first");
@@ -406,7 +441,7 @@ export class GameRoom extends DurableObject {
       // Reconnect: phone slept or Wi-Fi blipped
       if (msg.playerId && room.players[msg.playerId]) {
         const p = room.players[msg.playerId];
-        ws.serializeAttachment({ role: "player", playerId: p.id });
+        ws.serializeAttachment({ role: "player", playerId: p.id, at: Date.now() });
         this.send(ws, {
           type: "joined", role: "player", mode: room.mode,
           playerId: p.id, name: p.name,
@@ -429,7 +464,7 @@ export class GameRoom extends DurableObject {
       const id = crypto.randomUUID();
       room.players[id] = { id, name, joinedAt: Date.now(), score: 0 };
       await this.save();
-      ws.serializeAttachment({ role: "player", playerId: id });
+      ws.serializeAttachment({ role: "player", playerId: id, at: Date.now() });
       this.send(ws, {
         type: "joined", role: "player", mode: room.mode, playerId: id, name,
       });
