@@ -66,6 +66,11 @@
   .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #000;
     border: 1px solid var(--line); padding: 10px 16px; border-radius: 10px; max-width: 90%; }
   label.chk { color: var(--mut); margin-left: 10px; font-size: 15px; }
+    .sel { padding: 8px; font-size: 15px; background: #0f1219; color: var(--text); border: 1px solid var(--line); border-radius: 8px; margin: 3px 6px 3px 0; }
+  .amt { width: 72px; }
+  .imp { border: 1px solid var(--line); border-radius: 10px; padding: 10px; margin: 10px 0; background: #141824; }
+  .note2 { font-size: 14px; margin: 8px 0; color: var(--good); }
+  .note2.bad { color: var(--bad); }
 </style>
 </head>
 <body>
@@ -259,7 +264,125 @@ function parseQuestions(text) {
   if (!out.length) throw new Error("Add at least one question.");
   return out;
 }
+// ---------- Open Trivia DB import ----------
+var OTDB = "https://opentdb.com";
+var FALLBACK_CATS = [[9,"General Knowledge"],[10,"Entertainment: Books"],[11,"Entertainment: Film"],[12,"Entertainment: Music"],[13,"Entertainment: Musicals & Theatres"],[14,"Entertainment: Television"],[15,"Entertainment: Video Games"],[16,"Entertainment: Board Games"],[17,"Science & Nature"],[18,"Science: Computers"],[19,"Science: Mathematics"],[20,"Mythology"],[21,"Sports"],[22,"Geography"],[23,"History"],[24,"Politics"],[25,"Art"],[26,"Celebrities"],[27,"Animals"],[28,"Vehicles"],[29,"Entertainment: Comics"],[30,"Science: Gadgets"],[31,"Entertainment: Japanese Anime & Manga"],[32,"Entertainment: Cartoon & Animations"]];
+var cats = null, catsLoading = false;
+var imp = { cat: "", diff: "", amount: 10, replace: true, busy: false, note: "", bad: false };
 
+function dec(s) { try { return decodeURIComponent(s); } catch (e) { return String(s); } }
+function clean(s) { return dec(s).replace(/\s+/g, " ").trim(); }
+
+function shuffle(a) {
+  for (var i = a.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+
+async function loadCats() {
+  if (cats || catsLoading) return;
+  catsLoading = true;
+  try {
+    var r = await fetch(OTDB + "/api_category.php");
+    var d = await r.json();
+    cats = d.trivia_categories.map(function (c) { return [c.id, c.name]; });
+  } catch (e) { cats = FALLBACK_CATS; }
+  catsLoading = false;
+  renderGame();
+}
+
+async function importQuestions() {
+  if (imp.busy) return;
+  var n = Math.max(1, Math.min(50, parseInt(imp.amount, 10) || 10));
+  imp.amount = n;
+  imp.busy = true; imp.bad = false; imp.note = "Fetching questions..."; renderGame();
+  try {
+    var url = OTDB + "/api.php?amount=" + n + "&type=multiple&encode=url3986";
+    if (imp.cat) url += "&category=" + imp.cat;
+    if (imp.diff) url += "&difficulty=" + imp.diff;
+    var r = await fetch(url);
+    var d = await r.json();
+    if (d.response_code === 5) throw new Error("Open Trivia DB allows one request every 5 seconds. Wait a moment and try again.");
+    if (d.response_code === 1) throw new Error("Not enough questions for that choice. Try fewer, or a different difficulty or category.");
+    if (d.response_code !== 0) throw new Error("Open Trivia DB returned error code " + d.response_code + ".");
+
+    var list = [], skipped = 0;
+    d.results.forEach(function (x) {
+      var text = clean(x.question);
+      var right = clean(x.correct_answer).replace(/^\*+/, "").trim();
+      var wrong = x.incorrect_answers.map(function (o) { return clean(o).replace(/^\*+/, "").trim(); });
+      var opts = shuffle(wrong.concat([right]));
+      var ok = text && text.length <= 300 && opts.length === 4 &&
+        opts.every(function (o) { return o && o.length <= 120; }) &&
+        new Set(opts).size === 4;
+      if (!ok) { skipped++; return; }
+      list.push({ text: text, options: opts, correct: opts.indexOf(right) });
+    });
+    if (!list.length) throw new Error("None of those questions fit the game. Try again.");
+
+    var ed = getEditor();
+    var block = questionsToText(list);
+    ed.value = (!imp.replace && ed.value.trim()) ? ed.value.trim() + "\n\n" + block : block;
+    imp.note = "Loaded " + list.length + " question" + (list.length === 1 ? "" : "s") +
+      " into the editor" + (skipped ? " (" + skipped + " skipped)" : "") +
+      ". Review them, then click Save questions.";
+  } catch (e) {
+    imp.bad = true;
+    imp.note = e.name === "TypeError" ? "Couldn't reach Open Trivia DB. Check your internet connection." : e.message;
+  }
+  imp.busy = false;
+  renderGame();
+}
+
+function addOpt(sel, value, label) {
+  var o = document.createElement("option");
+  o.value = value; o.textContent = label;
+  sel.appendChild(o);
+}
+
+function importControls(parent) {
+  loadCats();
+  var box = h("div", "imp", null, parent);
+  h("div", "lbl", "Import ready-made questions from Open Trivia DB", box);
+
+  var cat = document.createElement("select");
+  cat.className = "sel";
+  addOpt(cat, "", "Any category");
+  (cats || FALLBACK_CATS).forEach(function (c) { addOpt(cat, c[0], c[1]); });
+  cat.value = imp.cat;
+  cat.onchange = function () { imp.cat = cat.value; };
+  box.appendChild(cat);
+
+  var diff = document.createElement("select");
+  diff.className = "sel";
+  [["", "Any difficulty"], ["easy", "Easy"], ["medium", "Medium"], ["hard", "Hard"]].forEach(function (d) {
+    addOpt(diff, d[0], d[1]);
+  });
+  diff.value = imp.diff;
+  diff.onchange = function () { imp.diff = diff.value; };
+  box.appendChild(diff);
+
+  var amt = document.createElement("input");
+  amt.type = "number"; amt.min = 1; amt.max = 50;
+  amt.className = "sel amt"; amt.value = imp.amount;
+  amt.oninput = function () { imp.amount = amt.value; };
+  box.appendChild(amt);
+  box.appendChild(document.createTextNode(" questions"));
+
+  var row = h("div", null, null, box);
+  btn("Import questions", "", importQuestions, row, imp.busy);
+  var lab = h("label", "chk", null, row);
+  var cb = document.createElement("input");
+  cb.type = "checkbox"; cb.checked = imp.replace;
+  cb.onchange = function () { imp.replace = cb.checked; };
+  lab.appendChild(cb);
+  lab.appendChild(document.createTextNode(" Replace the questions below (uncheck to add to them)"));
+
+  if (imp.note) h("div", "note2" + (imp.bad ? " bad" : ""), imp.note, box);
+  h("div", "help", "Free questions from opentdb.com (CC BY-SA 4.0). Multiple choice only, with the correct answer placed randomly.", box);
+}
 // ---------- rendering ----------
 function renderStart() {
   app.innerHTML = "";
@@ -331,6 +454,7 @@ function renderLobby(s) {
   h("div", null, "Questions (" + s.questionTotal + " loaded)", ed).style.fontWeight = "700";
   h("div", "help",
     "One question per block, blank line between blocks.\nFirst line is the question, then exactly 4 answers. Put * in front of the correct one.", ed);
+    importControls(ed);
   ed.appendChild(getEditor());
   var row = h("div", null, null, ed);
   btn("Save questions", "", function () {
