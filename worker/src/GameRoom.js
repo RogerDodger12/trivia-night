@@ -5,7 +5,7 @@ const MAX_PLAYERS = 100;
 const IDLE_MS = 12 * 60 * 60 * 1000; // wipe the room after 12 idle hours
 const MAX_SECONDS = 180;             // hard cap on any question timer
 const MIN_SECONDS = 5;
-const DEFAULT_SECONDS = { solo: 20, teams: 60 };
+const DEFAULT_SECONDS = { solo: 180, teams: 180 };
 const BASE_POINTS = 1000;
 const SPEED_BONUS = 500;             // solo only, scaled to the question timer
 const STALE_MS = 25000;              // no ping for this long = offline

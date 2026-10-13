@@ -395,7 +395,7 @@ function renderStart() {
   a.onclick = function () { createRoom("solo"); };
   var t = h("button", "mode", null, g);
   h("b", null, "Teams", t);
-  t.appendChild(document.createTextNode("One phone per table. Teams get flat points and longer timers."));
+  t.appendChild(document.createTextNode("One phone per table. Teams get flat points, no speed bonus."));
   t.onclick = function () { createRoom("teams"); };
   if (S.msg) h("div", "err", S.msg, app);
 }
